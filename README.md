@@ -31,7 +31,7 @@ over the 54 variants that were tried.
   the paper's publication, with a similarity measure that is essentially 1 for
   every firm every year.
 
-The full write-up is a eleven-page research note, [paper/note.pdf](paper/note.pdf),
+The full write-up is an eleven-page research note, [paper/note.pdf](paper/note.pdf),
 whose tables and every number in its text are generated from `results/` by
 `python -m lazyprices.report`.
 
