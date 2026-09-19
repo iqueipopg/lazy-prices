@@ -1,0 +1,17 @@
+# raw EDGAR documents (several GB) and cleaned text derived from them
+data/raw/
+data/processed/
+data/french/*.zip
+# keep small derived data
+!data/*.csv
+!results/*.csv
+!results/*.json
+!figures/
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/

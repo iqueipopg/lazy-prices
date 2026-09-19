@@ -1,0 +1,53 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "lazy-prices: a replication of 'Lazy Prices' on the S&P 100 with free data"
+type: software
+authors:
+  - family-names: "Queipo de Llano"
+    given-names: "Ignacio"
+version: 0.1.0
+date-released: 2026-09-19
+license: MIT
+repository-code: "https://github.com/iqueipopg/lazy-prices"
+keywords:
+  - 10-K
+  - textual analysis
+  - asset pricing
+  - backtest overfitting
+references:
+  - type: article
+    title: "Lazy Prices"
+    authors:
+      - family-names: Cohen
+        given-names: Lauren
+      - family-names: Malloy
+        given-names: Christopher
+      - family-names: Nguyen
+        given-names: Quoc
+    journal: "Journal of Finance"
+    volume: 75
+    issue: 3
+    year: 2020
+    doi: 10.1111/jofi.12885
+  - type: article
+    title: "The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting and Non-Normality"
+    authors:
+      - family-names: Bailey
+        given-names: David H.
+      - family-names: "López de Prado"
+        given-names: Marcos
+    journal: "Journal of Portfolio Management"
+    volume: 40
+    issue: 5
+    year: 2014
+  - type: article
+    title: "A five-factor asset pricing model"
+    authors:
+      - family-names: Fama
+        given-names: Eugene F.
+      - family-names: French
+        given-names: Kenneth R.
+    journal: "Journal of Financial Economics"
+    volume: 116
+    issue: 1
+    year: 2015

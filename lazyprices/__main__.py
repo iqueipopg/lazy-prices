@@ -1,0 +1,179 @@
+"""Run the whole pipeline: ``python -m lazyprices``.
+
+Every stage is cached on disk; delete the corresponding file (or pass
+``--refresh``) to recompute it.
+
+    download  -> data/universe.csv, data/filings.csv, data/raw/
+    text      -> data/processed/, results/similarity.csv
+    market    -> data/prices.csv, data/factors_daily.csv
+    portfolio -> results/portfolio_monthly.csv, quintile_table.csv, alphas.csv
+    trials    -> results/trials.csv, trials_monthly.csv, overfitting.json
+    figures   -> figures/*.png
+"""
+
+from __future__ import annotations
+
+import argparse
+import itertools
+import json
+import logging
+import time
+
+import pandas as pd
+
+from . import config, data, edgar, evaluation, figures, portfolio, text
+
+log = logging.getLogger("lazyprices")
+
+MAIN_SPEC = dict(score_col="cos_full", n_quantiles=5, lag_months=0, cohort="fiscal_year")
+COST_BPS = 10.0
+GRID = dict(
+    measure=["cos", "jac"],
+    section=["full", "1a", "7"],
+    n_quantiles=[3, 5, 10],
+    lag_months=[0, 1, 2],
+)
+
+
+def stage_download(refresh: bool) -> pd.DataFrame:
+    config.DATA.mkdir(parents=True, exist_ok=True)
+    uni_path = config.DATA / "universe.csv"
+    if uni_path.exists() and not refresh:
+        universe = pd.read_csv(uni_path, dtype={"cik": str})
+    else:
+        universe = edgar.load_universe()
+        universe.to_csv(uni_path, index=False)
+    idx_path = config.DATA / "filings.csv"
+    if idx_path.exists() and not refresh:
+        return edgar.load_filing_index(idx_path)
+    return edgar.download_universe(universe, index_path=idx_path)
+
+
+def stage_text(index: pd.DataFrame, refresh: bool) -> pd.DataFrame:
+    sim_path = config.RESULTS / "similarity.csv"
+    if sim_path.exists() and not refresh:
+        return pd.read_csv(sim_path, dtype={"cik": str}, parse_dates=["report_date", "filing_date", "prev_filing_date"])
+    processed = text.process_corpus(index)
+    processed.to_csv(config.DATA / "filings_processed.csv", index=False)
+    sim = text.compute_similarity(processed)
+    config.RESULTS.mkdir(parents=True, exist_ok=True)
+    sim.to_csv(sim_path, index=False, float_format="%.6f")
+    return sim
+
+
+def stage_market(universe_tickers: list[str], refresh: bool) -> tuple[pd.DataFrame, pd.DataFrame]:
+    prices = data.download_prices(universe_tickers, refresh=refresh)
+    factors = data.download_factors(refresh=refresh)
+    return prices, factors
+
+
+def _returns_for_universe(prices: pd.DataFrame, sim: pd.DataFrame) -> pd.DataFrame:
+    rets = data.daily_returns(prices)
+    # similarity table uses SEC tickers; prices use yfinance symbols
+    rets.columns = [c for c in rets.columns]
+    sim["ticker"] = sim["ticker"].map(data.yf_symbol)
+    return rets
+
+
+def stage_portfolio(sim: pd.DataFrame, rets: pd.DataFrame, factors_m: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    daily, monthly = portfolio.run_variant(sim, rets, cost_bps=COST_BPS, **MAIN_SPEC)
+    table, alphas = evaluation.evaluate_portfolio(monthly, factors_m, MAIN_SPEC["n_quantiles"])
+    monthly.to_csv(config.RESULTS / "portfolio_monthly.csv", float_format="%.6f")
+    table.to_csv(config.RESULTS / "quintile_table.csv", float_format="%.4f")
+    alphas.to_csv(config.RESULTS / "alphas.csv", float_format="%.4f")
+    return monthly, table, alphas
+
+
+def stage_trials(sim: pd.DataFrame, rets: pd.DataFrame, factors_m: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, evaluation.OverfittingReport]:
+    rows, series = [], {}
+    for measure, section, nq, lag in itertools.product(*GRID.values()):
+        col = f"{measure}_{section}"
+        name = f"{col}|q{nq}|lag{lag}"
+        _, monthly = portfolio.run_variant(sim, rets, col, n_quantiles=nq, lag_months=lag, cost_bps=COST_BPS)
+        if monthly.empty:
+            continue
+        series[name] = monthly["LS"]
+        stats = evaluation.summary_stats(monthly["LS"])
+        reg = evaluation.alpha_regression(monthly["LS"], factors_m.reindex(monthly.index), "FF5+MOM")
+        rows.append({"variant": name, "measure": measure, "section": section, "n_quantiles": nq, "lag_months": lag,
+                     **stats, "alpha_FF5+MOM": reg["alpha_ann_pct"], "t_FF5+MOM": reg["t_stat"],
+                     "sharpe_net": evaluation.sharpe_annual(monthly["LS_net"])})
+    trials = pd.DataFrame(rows)
+    matrix = pd.DataFrame(series)
+    report = evaluation.overfitting_analysis(matrix)
+    trials.to_csv(config.RESULTS / "trials.csv", index=False, float_format="%.4f")
+    matrix.to_csv(config.RESULTS / "trials_monthly.csv", float_format="%.6f")
+    report.to_json(config.RESULTS / "overfitting.json")
+    return trials, matrix, report
+
+
+def stage_robustness(sim: pd.DataFrame, rets: pd.DataFrame, factors_m: pd.DataFrame) -> pd.DataFrame:
+    """Main specification with alternative ranking / sub-periods."""
+    rows = []
+    spec = dict(MAIN_SPEC)
+    for label, kwargs, start, end in [
+        ("main", spec, None, None),
+        ("trailing-window ranking (point-in-time)", {**spec, "cohort": "trailing"}, None, None),
+        ("main, 2009-2016", spec, None, "2016-12-31"),
+        ("main, 2017-2026", spec, "2017-01-01", None),
+    ]:
+        _, monthly = portfolio.run_variant(sim, rets, cost_bps=COST_BPS, **kwargs)
+        monthly = monthly.loc[start:end]
+        stats = evaluation.summary_stats(monthly["LS"])
+        reg = evaluation.alpha_regression(monthly["LS"], factors_m.reindex(monthly.index), "FF5+MOM")
+        rows.append({"specification": label, **stats, "alpha_FF5+MOM": reg["alpha_ann_pct"], "t_FF5+MOM": reg["t_stat"]})
+    rob = pd.DataFrame(rows).set_index("specification")
+    rob.to_csv(config.RESULTS / "robustness.csv", float_format="%.4f")
+    return rob
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(prog="python -m lazyprices")
+    ap.add_argument("--refresh", action="store_true", help="ignore cached results (raw downloads are always cached)")
+    ap.add_argument("--skip-figures", action="store_true")
+    args = ap.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    t0 = time.time()
+
+    index = stage_download(args.refresh)
+    log.info("filings: %d rows, %d companies", len(index), index["ticker"].nunique())
+    sim = stage_text(index, args.refresh)
+    log.info("similarity pairs: %d", len(sim))
+    universe = pd.read_csv(config.DATA / "universe.csv", dtype={"cik": str})
+    prices, factors = stage_market(universe["ticker"].tolist(), args.refresh)
+    factors_m = evaluation.monthly_factors(factors)
+    rets = _returns_for_universe(prices, sim)
+    spy_m = portfolio.to_monthly(pd.DataFrame({"SPY": rets[config.BENCHMARK]}), ["SPY"])["SPY"]
+
+    monthly, table, alphas = stage_portfolio(sim, rets, factors_m)
+    log.info("main spec: %d months\n%s", len(monthly), table.round(2).to_string())
+    trials, matrix, report = stage_trials(sim, rets, factors_m)
+    log.info("trials: %d variants; best %s; DSR raw %.3f eff %.3f; PBO %.3f",
+             report.n_trials, report.best_trial, report.dsr_raw, report.dsr_eff, report.pbo)
+    rob = stage_robustness(sim, rets, factors_m)
+    log.info("robustness:\n%s", rob.round(2).to_string())
+
+    summary = {
+        "n_companies": int(index["ticker"].nunique()),
+        "n_filings": int(len(index)),
+        "n_pairs": int(len(sim)),
+        "n_pairs_with_1a": int(sim["cos_1a"].notna().sum()),
+        "n_pairs_with_7": int(sim["cos_7"].notna().sum()),
+        "sample_start": str(monthly.index.min().date()),
+        "sample_end": str(monthly.index.max().date()),
+        "n_months": int(len(monthly)),
+        "main_spec": MAIN_SPEC,
+        "cost_bps": COST_BPS,
+        "spy_sharpe": evaluation.sharpe_annual(spy_m.reindex(monthly.index) - factors_m["RF"].reindex(monthly.index)),
+        "runtime_seconds": round(time.time() - t0, 1),
+    }
+    with open(config.RESULTS / "summary.json", "w") as fh:
+        json.dump(summary, fh, indent=2)
+
+    if not args.skip_figures:
+        figures.make_all(monthly, spy_m, table, sim, trials, json.load(open(config.RESULTS / "overfitting.json")))
+    log.info("done in %.0f s", time.time() - t0)
+
+
+if __name__ == "__main__":
+    main()
