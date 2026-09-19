@@ -54,7 +54,7 @@ def cumulative_returns(monthly: pd.DataFrame, spy_monthly: pd.Series, path: Path
     ax.set_yscale("log")
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-    ax.set_yticks([0.5, 0.7, 1, 1.5, 2, 3, 4, 6, 8])
+    ax.set_yticks([0.5, 0.7, 1, 1.5, 2, 3, 4, 6, 8, 10, 12])
     _style(ax, "Growth of 1 unit: long most-similar quintile, short least-similar quintile", "log scale")
     ax.legend(frameon=False, fontsize=9, loc="upper left")
     fig.tight_layout()
@@ -86,20 +86,22 @@ def quantile_returns(table: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
-def similarity_by_year(sim: pd.DataFrame, path: Path, col: str = "cos_full") -> None:
-    fig, ax = plt.subplots(figsize=(9, 4))
+def similarity_by_year(sim: pd.DataFrame, path: Path) -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharex=False)
     years = sorted(sim["fiscal_year"].unique())
-    data = [sim.loc[sim["fiscal_year"] == y, col].dropna().to_numpy() for y in years]
-    bp = ax.boxplot(data, tick_labels=[str(y) for y in years], widths=0.55, patch_artist=True,
-                    showfliers=True, flierprops=dict(marker=".", markersize=3, color=MUTED, alpha=0.6),
-                    medianprops=dict(color=TEXT, lw=1.2))
-    for patch in bp["boxes"]:
-        patch.set(facecolor="#cfe0f6", edgecolor=SERIES[0], linewidth=1)
-    for k in ("whiskers", "caps"):
-        for line in bp[k]:
-            line.set(color=SERIES[0], linewidth=1)
-    _style(ax, "Cosine similarity (TF-IDF, full 10-K) with the previous year's filing, by fiscal year", "similarity")
-    ax.tick_params(axis="x", rotation=45)
+    for ax, col, title in zip(axes, ("cos_full", "jac_full"),
+                              ("Cosine similarity (TF-IDF), full 10-K", "Jaccard similarity, full 10-K")):
+        data = [sim.loc[sim["fiscal_year"] == y, col].dropna().to_numpy() for y in years]
+        bp = ax.boxplot(data, tick_labels=[str(y)[2:] for y in years], widths=0.55, patch_artist=True,
+                        showfliers=True, flierprops=dict(marker=".", markersize=3, color=MUTED, alpha=0.6),
+                        medianprops=dict(color=TEXT, lw=1.2))
+        for patch in bp["boxes"]:
+            patch.set(facecolor="#cfe0f6", edgecolor=SERIES[0], linewidth=1)
+        for k in ("whiskers", "caps"):
+            for line in bp[k]:
+                line.set(color=SERIES[0], linewidth=1)
+        _style(ax, title, "similarity with previous year's 10-K")
+        ax.set_xlabel("fiscal year (20xx)", color=MUTED, fontsize=9)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -107,19 +109,22 @@ def similarity_by_year(sim: pd.DataFrame, path: Path, col: str = "cos_full") -> 
 
 def dsr_trials(trials: pd.DataFrame, report: dict, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(9, 4.2))
-    t = trials.sort_values("sharpe").reset_index(drop=True)
+    col = "sharpe_common_sample" if "sharpe_common_sample" in trials else "sharpe"
+    t = trials.sort_values(col).reset_index(drop=True)
     colors = [SERIES[1] if v == report["best_trial"] else "#9dbfe9" for v in t["variant"]]
-    ax.bar(np.arange(len(t)), t["sharpe"], color=colors, width=0.8)
+    ax.bar(np.arange(len(t)), t[col], color=colors, width=0.8)
     ax.axhline(report["expected_max_sharpe_annual_raw"], color=SERIES[1], lw=1.2, ls="--",
                label=f"E[max Sharpe] of {report['n_trials']} noise trials (raw N): {report['expected_max_sharpe_annual_raw']:.2f}")
     ax.axhline(report["expected_max_sharpe_annual_eff"], color=SERIES[2], lw=1.2, ls=":",
                label=f"E[max Sharpe], effective N = {report['n_effective']:.1f}: {report['expected_max_sharpe_annual_eff']:.2f}")
     ax.axhline(0, color=MUTED, lw=0.8)
-    _style(ax, f"Annualised Sharpe of every variant (best: {report['best_trial']}, DSR = {report['dsr_raw']:.2f}, PBO = {report['pbo']:.2f})",
+    _style(ax, f"Annualised Sharpe of the {report['n_trials']} variants on the common sample\n"
+               f"best: {report['best_trial']}; deflated Sharpe ratio = {report['dsr_raw']:.2f}; PBO = {report['pbo']:.2f}",
            "annualised Sharpe")
     ax.set_xlabel("variants, sorted (measure x section x groups x formation lag)", color=MUTED, fontsize=9)
     ax.set_xticks([])
-    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    ax.margins(y=0.15)
+    ax.legend(frameon=False, fontsize=9, loc="lower right")
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)

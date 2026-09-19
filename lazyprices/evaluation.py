@@ -145,6 +145,7 @@ class OverfittingReport:
     prob_oos_loss: float
     cscv_splits: int
     cscv_combinations: int
+    trial_sharpe_annual: dict[str, float]  # per variant, on the common sample
 
     def to_json(self, path) -> None:
         with open(path, "w") as fh:
@@ -190,4 +191,41 @@ def overfitting_analysis(trials: pd.DataFrame, n_splits: int = 16) -> Overfittin
         prob_oos_loss=float(res.prob_oos_loss),
         cscv_splits=int(res.n_splits),
         cscv_combinations=int(res.n_combinations),
+        trial_sharpe_annual={str(c): float(v * ann) for c, v in zip(x.columns, sr)},
     )
+
+
+# --------------------------------------------------------------------------- #
+# Model-free check: cross-sectional rank correlations
+# --------------------------------------------------------------------------- #
+def rank_correlations(sim: pd.DataFrame, prices: pd.DataFrame, score_cols: list[str], min_cohort: int = 20) -> pd.DataFrame:
+    """Spearman correlation, within each fiscal-year cohort, between the
+    similarity score and the stock's return over the twelve months after the
+    first trading day of the month following the filing. The time-series mean
+    of the yearly correlations and its t-statistic are reported (Fama-MacBeth
+    style). ``sim['ticker']`` must already use the price column names."""
+    from scipy.stats import spearmanr
+
+    from .portfolio import first_trading_day_after
+
+    days = prices.index
+    fwd = []
+    for r in sim.itertuples():
+        entry = first_trading_day_after(r.filing_date, days)
+        exit_ = first_trading_day_after(r.filing_date, days, 12)
+        if entry is None or exit_ is None or r.ticker not in prices.columns:
+            fwd.append(np.nan)
+            continue
+        a, b = prices.at[entry, r.ticker], prices.at[exit_, r.ticker]
+        fwd.append(b / a - 1.0 if pd.notna(a) and pd.notna(b) else np.nan)
+    df = sim.assign(fwd12=fwd)
+    rows = []
+    for c in score_cols:
+        yearly = []
+        for _, g in df.dropna(subset=[c, "fwd12"]).groupby("fiscal_year"):
+            if len(g) >= min_cohort:
+                yearly.append(spearmanr(g[c], g["fwd12"])[0])
+        y = np.array(yearly)
+        rows.append({"score": c, "mean_rank_corr": y.mean(), "t_stat": y.mean() / y.std(ddof=1) * np.sqrt(len(y)),
+                     "n_years": len(y), "share_positive": float((y > 0).mean())})
+    return pd.DataFrame(rows).set_index("score")

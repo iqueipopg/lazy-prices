@@ -1,0 +1,19 @@
+{
+  "n_companies": 99,
+  "n_filings": 1792,
+  "n_pairs": 1690,
+  "n_pairs_with_1a": 1560,
+  "n_pairs_with_7": 1297,
+  "sample_start": "2009-03-31",
+  "sample_end": "2026-09-30",
+  "n_months": 211,
+  "main_spec": {
+    "score_col": "cos_full",
+    "n_quantiles": 5,
+    "lag_months": 0,
+    "cohort": "fiscal_year"
+  },
+  "cost_bps": 10.0,
+  "spy_sharpe": 1.0208126239450237,
+  "runtime_seconds": 23.6
+}

@@ -101,6 +101,7 @@ def stage_trials(sim: pd.DataFrame, rets: pd.DataFrame, factors_m: pd.DataFrame)
     trials = pd.DataFrame(rows)
     matrix = pd.DataFrame(series)
     report = evaluation.overfitting_analysis(matrix)
+    trials["sharpe_common_sample"] = trials["variant"].map(report.trial_sharpe_annual)
     trials.to_csv(config.RESULTS / "trials.csv", index=False, float_format="%.4f")
     matrix.to_csv(config.RESULTS / "trials_monthly.csv", float_format="%.6f")
     report.to_json(config.RESULTS / "overfitting.json")
@@ -152,6 +153,9 @@ def main(argv: list[str] | None = None) -> None:
              report.n_trials, report.best_trial, report.dsr_raw, report.dsr_eff, report.pbo)
     rob = stage_robustness(sim, rets, factors_m)
     log.info("robustness:\n%s", rob.round(2).to_string())
+    rc = evaluation.rank_correlations(sim, prices, [f"{m}_{s}" for m in GRID["measure"] for s in GRID["section"]])
+    rc.to_csv(config.RESULTS / "rank_correlations.csv", float_format="%.4f")
+    log.info("rank correlations:\n%s", rc.round(3).to_string())
 
     summary = {
         "n_companies": int(index["ticker"].nunique()),
