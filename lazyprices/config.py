@@ -12,13 +12,9 @@ PROCESSED = DATA / "processed"
 RESULTS = ROOT / "results"
 FIGURES = ROOT / "figures"
 
-LUCA_CACHE = Path(
-    os.environ.get("LUCA_CACHE", "/home/queipo/luca-ai-lab/data/cache/corpus_facts")
-)
+LUCA_CACHE = Path(os.environ.get("LUCA_CACHE", "/home/queipo/luca-ai-lab/data/cache/corpus_facts"))
 
-SEC_USER_AGENT = os.environ.get(
-    "SEC_USER_AGENT", "Ignacio Queipo de Llano i.queipodellano@iese.net"
-)
+SEC_USER_AGENT = os.environ.get("SEC_USER_AGENT", "Ignacio Queipo de Llano i.queipodellano@iese.net")
 SEC_MAX_RPS = 8.0
 
 # Fiscal years covered by the 10-K download. 2007 is downloaded only so that

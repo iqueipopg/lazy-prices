@@ -106,8 +106,8 @@ def test_compute_similarity_on_synthetic_corpus(tmp_path):
     rows = []
     docs = {
         ("A", 2010): "alpha beta gamma " * 300,
-        ("A", 2011): "alpha beta gamma " * 300,          # identical -> 1.0
-        ("A", 2012): "delta epsilon zeta " * 300,        # disjoint -> 0.0
+        ("A", 2011): "alpha beta gamma " * 300,  # identical -> 1.0
+        ("A", 2012): "delta epsilon zeta " * 300,  # disjoint -> 0.0
         ("B", 2010): "alpha beta omega " * 300,
         ("B", 2011): "alpha beta omega theta " * 300,
         ("B", 2012): "alpha beta omega theta " * 300,
@@ -116,11 +116,19 @@ def test_compute_similarity_on_synthetic_corpus(tmp_path):
         acc = f"000-{tic}-{fy}"
         paths = text.processed_paths(f"cik{tic}", acc, tmp_path)
         paths["full"].parent.mkdir(parents=True)
-        for sec, p in paths.items():
+        for p in paths.values():
             p.write_text(body)
-        rows.append({"cik": f"cik{tic}", "ticker": tic, "fiscal_year": fy, "accession": acc,
-                     "report_date": pd.Timestamp(f"{fy}-12-31"), "filing_date": pd.Timestamp(f"{fy + 1}-02-20"),
-                     "path": "x"})
+        rows.append(
+            {
+                "cik": f"cik{tic}",
+                "ticker": tic,
+                "fiscal_year": fy,
+                "accession": acc,
+                "report_date": pd.Timestamp(f"{fy}-12-31"),
+                "filing_date": pd.Timestamp(f"{fy + 1}-02-20"),
+                "path": "x",
+            }
+        )
     sim = text.compute_similarity(pd.DataFrame(rows), processed_dir=tmp_path, max_features=None)
     a = sim.set_index(["ticker", "fiscal_year"])
     assert a.loc[("A", 2011), "cos_full"] == pytest.approx(1.0)

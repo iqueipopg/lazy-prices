@@ -30,11 +30,11 @@ ANNUAL_FORMS = {"10-K", "10-K405"}
 # Companies that moved to a new CIK after a holding-company reorganisation.
 # Filings of the predecessor registrant are attributed to the current ticker.
 PREDECESSOR_CIKS: dict[str, list[str]] = {
-    "XOM": ["0000034088"],    # Exxon Mobil Corp -> ExxonMobil Holdings Corp (2026)
+    "XOM": ["0000034088"],  # Exxon Mobil Corp -> ExxonMobil Holdings Corp (2026)
     "GOOGL": ["0001288776"],  # Google Inc. -> Alphabet Inc. (2015)
-    "DIS": ["0001001039"],    # TWDC Enterprises 18 Corp. -> The Walt Disney Company (2019)
-    "BLK": ["0001364742"],    # BlackRock Finance, Inc. -> BlackRock, Inc. (2024)
-    "MDT": ["0000064670"],    # Medtronic, Inc. -> Medtronic plc (2015)
+    "DIS": ["0001001039"],  # TWDC Enterprises 18 Corp. -> The Walt Disney Company (2019)
+    "BLK": ["0001364742"],  # BlackRock Finance, Inc. -> BlackRock, Inc. (2024)
+    "MDT": ["0000064670"],  # Medtronic, Inc. -> Medtronic plc (2015)
 }
 
 
@@ -96,9 +96,7 @@ class EdgarClient:
         max_retries: int = 6,
     ):
         self.session = requests.Session()
-        self.session.headers.update(
-            {"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"}
-        )
+        self.session.headers.update({"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"})
         self.limiter = RateLimiter(max_rps)
         self.raw_dir = Path(raw_dir)
         self.max_retries = max_retries
@@ -138,15 +136,11 @@ class EdgarClient:
         """Full submissions index (recent block plus paginated files)."""
         cik = cik.zfill(10)
         name = f"CIK{cik}.json"
-        main = json.loads(
-            self._cached(self.raw_dir / "submissions" / name, SUBMISSIONS_URL.format(name=name))
-        )
+        main = json.loads(self._cached(self.raw_dir / "submissions" / name, SUBMISSIONS_URL.format(name=name)))
         parts = [pd.DataFrame(main["filings"]["recent"])]
         for extra in main["filings"].get("files", []):
             n = extra["name"]
-            d = json.loads(
-                self._cached(self.raw_dir / "submissions" / n, SUBMISSIONS_URL.format(name=n))
-            )
+            d = json.loads(self._cached(self.raw_dir / "submissions" / n, SUBMISSIONS_URL.format(name=n)))
             parts.append(pd.DataFrame(d))
         main["_filings"] = pd.concat(parts, ignore_index=True)
         return main
@@ -155,9 +149,7 @@ class EdgarClient:
         return self.raw_dir / cik.zfill(10) / accession.replace("-", "") / Path(doc).name
 
     def document(self, cik: str, accession: str, doc: str) -> bytes:
-        url = ARCHIVES_URL.format(
-            cik=int(cik), acc_nodash=accession.replace("-", ""), doc=doc
-        )
+        url = ARCHIVES_URL.format(cik=int(cik), acc_nodash=accession.replace("-", ""), doc=doc)
         return self._cached(self.document_path(cik, accession, doc), url)
 
 
@@ -188,9 +180,7 @@ def annual_filings(
     f = f.sort_values(["report_date", "filing_date"]).drop_duplicates("report_date", keep="first")
     f = f.drop_duplicates("fiscal_year", keep="last").sort_values("fiscal_year")
     cols = ["fiscal_year", "report_date", "filing_date", "accessionNumber", "primaryDocument", "form"]
-    out = f[cols].rename(
-        columns={"accessionNumber": "accession", "primaryDocument": "primary_document"}
-    )
+    out = f[cols].rename(columns={"accessionNumber": "accession", "primaryDocument": "primary_document"})
     return out.reset_index(drop=True)
 
 
@@ -275,31 +265,33 @@ def download_universe(
             results.append(fut.result())
             if i % 100 == 0:
                 log.info("downloaded %d / %d", i, len(futs))
-    df = pd.DataFrame(
-        [
-            {
-                "cik": r.cik,
-                "filer_cik": r.filer_cik,
-                "ticker": r.ticker,
-                "fiscal_year": r.fiscal_year,
-                "report_date": r.report_date.date(),
-                "filing_date": r.filing_date.date(),
-                "accession": r.accession,
-                "path": str(r.path.relative_to(config.ROOT)) if r.path else None,
-                "error": r.error,
-            }
-            for r in results
-        ]
-    ).sort_values(["ticker", "fiscal_year"]).reset_index(drop=True)
+    df = (
+        pd.DataFrame(
+            [
+                {
+                    "cik": r.cik,
+                    "filer_cik": r.filer_cik,
+                    "ticker": r.ticker,
+                    "fiscal_year": r.fiscal_year,
+                    "report_date": r.report_date.date(),
+                    "filing_date": r.filing_date.date(),
+                    "accession": r.accession,
+                    "path": str(r.path.relative_to(config.ROOT)) if r.path else None,
+                    "error": r.error,
+                }
+                for r in results
+            ]
+        )
+        .sort_values(["ticker", "fiscal_year"])
+        .reset_index(drop=True)
+    )
     index_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(index_path, index=False)
     return df
 
 
 def load_filing_index(index_path: Path = config.DATA / "filings.csv") -> pd.DataFrame:
-    return pd.read_csv(
-        index_path, dtype={"cik": str, "filer_cik": str}, parse_dates=["report_date", "filing_date"]
-    )
+    return pd.read_csv(index_path, dtype={"cik": str, "filer_cik": str}, parse_dates=["report_date", "filing_date"])
 
 
 if __name__ == "__main__":

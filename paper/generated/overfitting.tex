@@ -1,0 +1,20 @@
+\begin{table}[htbp]\centering\small
+\caption{Selection-bias corrections and placebo test.}\label{tab:overfitting}
+\begin{tabular}{lr}\toprule
+ & Value \\ \midrule
+Variants tried & 54 \\
+Variants with a positive Sharpe ratio & 17 \\
+Variants with $|t| > 2$ on the FF5+MOM alpha & 8 (all negative) \\
+Best variant on the common sample & \texttt{cos\_1a$\mid$q10$\mid$lag2} \\
+Annualised Sharpe, best / median variant & 0.54 / -0.05 \\
+E[max Sharpe] of $N$ zero-skill trials, raw $N$ & 0.80 \\
+\textbf{Deflated Sharpe ratio, raw $N$} & \textbf{0.13} \\
+Effective number of trials (participation ratio) & 4.2 \\
+E[max Sharpe], effective $N$ & 0.37 \\
+Deflated Sharpe ratio, effective $N$ & 0.76 \\
+PBO (CSCV, $S=16$, 12,870 partitions) & 0.08 \\
+P[out-of-sample loss of the in-sample winner] & 0.21 \\
+Placebo: share of 200 shuffles with Sharpe below the actual strategy & 0.34 \\
+Placebo: standard deviation of the Sharpe ratio across shuffles & 0.25 \\
+Placebo: share of shuffles with $|t| > 2$ & 0.06 \\
+\bottomrule\end{tabular}\end{table}

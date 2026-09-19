@@ -283,15 +283,29 @@ def compute_similarity(
     prv = pairs["prev_accession"].map(pos).to_numpy()
 
     out = pairs[
-        ["cik", "ticker", "fiscal_year", "prev_fiscal_year", "report_date", "filing_date",
-         "prev_filing_date", "accession", "prev_accession"]
+        [
+            "cik",
+            "ticker",
+            "fiscal_year",
+            "prev_fiscal_year",
+            "report_date",
+            "filing_date",
+            "prev_filing_date",
+            "accession",
+            "prev_accession",
+        ]
     ].copy()
     for sec in SECTIONS:
         files = [str(processed_paths(r.cik, r.accession, processed_dir)[sec]) for r in idx.itertuples()]
         lengths = np.array([Path(f).stat().st_size if Path(f).exists() else 0 for f in files])
         vec = CountVectorizer(
-            input="filename", encoding="utf-8", decode_error="replace",
-            token_pattern=TOKEN_PATTERN, lowercase=True, max_features=max_features, dtype=np.int32,
+            input="filename",
+            encoding="utf-8",
+            decode_error="replace",
+            token_pattern=TOKEN_PATTERN,
+            lowercase=True,
+            max_features=max_features,
+            dtype=np.int32,
         )
         counts = vec.fit_transform(files).tocsr()
         log.info("section %s: %d docs, %d terms", sec, *counts.shape)

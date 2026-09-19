@@ -1,18 +1,39 @@
 # Lazy Prices on the S&P 100
 
-A replication of Cohen, Malloy and Nguyen (2020), *Lazy Prices*, on the current
-S&P 100 constituents using only free data: 10-K texts from SEC EDGAR, adjusted
-prices from yfinance and daily factors from the Kenneth French Data Library.
-The strategy is evaluated with Newey-West factor alphas and with the
-selection-bias corrections of Bailey and López de Prado (deflated Sharpe ratio,
-probability of backtest overfitting) over the 54 variants that were tried.
+[![tests](https://github.com/iqueipopg/lazy-prices/actions/workflows/tests.yml/badge.svg)](https://github.com/iqueipopg/lazy-prices/actions/workflows/tests.yml)
+[![note](https://img.shields.io/badge/research%20note-PDF-blue)](paper/note.pdf)
+[![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
-**Result: on this universe and period the effect is absent.** The long-short
-portfolio (long the quintile whose 10-K changed least, short the quintile whose
-10-K changed most) earns -0.9% a year with an FF5+MOM alpha of -0.9% (t = -0.5)
-over March 2009 to September 2026. The best of 54 variants has an annualised
-Sharpe of 0.54 and a deflated Sharpe ratio of 0.13. The only variants with
-|t| > 2 have the opposite sign to the paper.
+A replication of Cohen, Malloy and Nguyen (2020), *Lazy Prices*, on the current
+S&P 100 with free data (10-K texts from SEC EDGAR, yfinance prices, Kenneth
+French factors), evaluated with Newey-West factor alphas, event-time abnormal
+returns, a placebo test, and the selection-bias corrections of Bailey and
+López de Prado (deflated Sharpe ratio, probability of backtest overfitting)
+over the 54 variants that were tried.
+
+**In 90 seconds**
+
+- **Result: no effect on this universe and period.** Long the quintile whose
+  10-K changed least, short the quintile whose 10-K changed most: -0.9% a year,
+  FF5+MOM alpha -0.9% (t = -0.5), Sharpe -0.11 with a bootstrap interval of
+  [-0.56, 0.38], March 2009 to September 2026.
+- **Three independent checks agree.** Event-time abnormal return after twelve
+  months: -1.8% (t = -0.6). Within-cohort rank correlation between text change
+  and forward return: 0.03 (t = 1.1). The actual strategy sits at the 33rd
+  percentile of 200 placebo runs with shuffled scores.
+- **The best of 54 variants looks tempting and is not.** Annualised Sharpe
+  0.54, alpha 4.3% with t = 1.3. Its deflated Sharpe ratio is 0.13: what the
+  luckiest of 54 zero-skill trials would show. The only variants with |t| > 2
+  have the opposite sign to the paper.
+- **Why this is the expected outcome.** The universe is 100 of the most
+  scrutinised firms in the world, selected after the fact for having survived
+  (every quintile shows a positive alpha of 2% to 8% a year), in a period after
+  the paper's publication, with a similarity measure that is essentially 1 for
+  every firm every year.
+
+The full write-up is a eleven-page research note, [paper/note.pdf](paper/note.pdf),
+whose tables and every number in its text are generated from `results/` by
+`python -m lazyprices.report`.
 
 ![cumulative](figures/cumulative_long_short_vs_spy.png)
 
@@ -57,9 +78,10 @@ Sample sizes after processing:
   a year. The long-short difference is less exposed to this bias than either
   leg, but stocks whose 10-K changed a lot because the business was collapsing
   are exactly the ones that are missing from the short leg.
-- **100 large caps.** The paper's effect is estimated on thousands of firms and
-  is strongest among smaller, less covered stocks. Here each quintile holds
-  about 19 stocks, so portfolio returns are noisy and the test has low power.
+- **100 large caps.** The paper's effect is estimated on thousands of firms
+  across the size distribution. Whether it survives among the 100 largest is
+  exactly what this sample cannot answer with power: each quintile holds about
+  19 stocks, so portfolio returns are noisy.
 - **Period.** Filings from FY2007 give the first change score for FY2008 filings
   (filed in early 2009), so returns run from March 2009 to September 2026,
   entirely after the paper's sample and largely after its publication as a
@@ -151,6 +173,7 @@ Long-short portfolio (Q5 minus Q1), 211 months, March 2009 to September 2026:
 | Mean return (% per year) | -0.92 | -1.24 |
 | Volatility (% per year) | 8.46 | 8.49 |
 | Sharpe ratio | -0.11 | -0.15 |
+| Sharpe ratio, 95% block-bootstrap interval | [-0.56, 0.38] | [-0.58, 0.34] |
 | Maximum drawdown (%) | -33.1 | -34.7 |
 | CAPM alpha (% per year), t-stat | -0.68 (-0.37) | -1.00 (-0.53) |
 | FF3 alpha (% per year), t-stat | -0.42 (-0.23) | -0.73 (-0.40) |
@@ -199,6 +222,48 @@ return over the following twelve months, averaged over the 17 cohorts.
 The sign is the paper's (more similar, higher return) for the full document
 and for cosine on Item 1A, but the magnitude is tiny and none of the
 correlations is distinguishable from zero.
+
+### Event time
+
+The paper's central figure is the cumulative abnormal return in the months
+after the filing. Here, for every filing in the main specification, the
+market-adjusted (minus SPY) return is cumulated month by month from formation;
+averages are taken first within and then across the 17 fiscal-year cohorts, so
+the standard error treats each cohort as one observation
+(`results/event_time.csv`).
+
+| Month after formation | Q1 (most change) | Q5 (least change) | Q5 minus Q1 | s.e. |
+|---|---|---|---|---|
+| 3 | 2.1% | -0.9% | -3.0% | 1.4% |
+| 6 | 2.2% | -0.3% | -2.5% | 1.6% |
+| 12 | 4.2% | 2.4% | -1.8% | 2.9% |
+
+Both extreme quintiles beat SPY (equal-weighted survivors against a
+cap-weighted index); their difference has the opposite sign to the paper and
+is inside the noise.
+
+![event](figures/event_time_car.png)
+
+### Placebo
+
+The main specification is re-run 200 times with the similarity scores
+permuted within each fiscal-year cohort. Every breakpoint and every cohort's
+score distribution is unchanged; only the link between text and company is
+broken (`results/placebo.csv`, `results/placebo_summary.json`).
+
+| | value |
+|---|---|
+| Placebo Sharpe, mean and standard deviation | 0.00, 0.25 |
+| Placebo Sharpe, 5th to 95th percentile | -0.42 to 0.40 |
+| Actual strategy's percentile in the placebo distribution | 33rd |
+| Share of placebo runs with \|t\| > 2 on the FF5+MOM alpha | 6% |
+| Best of 54 variants' percentile in the placebo distribution | 99.5th |
+
+The last row is the trap: the best variant beats almost every *single*
+placebo run, which is why it must be compared with the maximum of 54 trials,
+as the deflated Sharpe ratio does, and not with one draw.
+
+![placebo](figures/placebo_sharpe.png)
 
 ### Overfitting evaluation over the 54 variants
 
@@ -249,9 +314,8 @@ correlated trials looks like.
    effect. The main specification's alpha is slightly negative and
    indistinguishable from zero under every factor model, with or without
    costs, and the model-free rank correlations are near zero.
-2. This is not a rejection of the paper. The paper's effect lives in a broad
-   universe with many small, thinly covered firms and in a period before the
-   idea was published. Here the universe is 100 of the most scrutinised
+2. This is not a rejection of the paper. Its effect is estimated on a broad
+   universe of thousands of firms in a period before the idea was published. Here the universe is 100 of the most scrutinised
    companies in the world, selected after the fact for having survived, and
    the period is after publication. A null result in this setting is what the
    paper's own mechanism (slow attention) would predict for firms with the
@@ -274,13 +338,19 @@ lazyprices/
   data.py        yfinance prices, Kenneth French factors
   portfolio.py   cohort ranking, formation calendar, equal-weighted overlapping portfolios, costs
   evaluation.py  Newey-West alphas, Sharpe, drawdown, DSR / PBO via bto, rank correlations
-  figures.py     the four figures
+  diagnostics.py event-time abnormal returns, placebo with shuffled scores, block-bootstrap Sharpe interval
+  figures.py     the six figures
+  report.py      LaTeX tables and number macros for the note, generated from results/
   __main__.py    the pipeline
-tests/           23 tests, no network: similarity values on synthetic texts, item extraction,
-                 quantile formation, no look-ahead in the formation calendar, alpha recovery
+tests/           27 tests, no network: similarity values on synthetic texts, item extraction,
+                 quantile formation, no look-ahead in the formation calendar and in event time,
+                 alpha recovery, placebo shuffling, bootstrap interval
+paper/           note.tex and note.pdf (eleven pages, single column), generated/*.tex
 results/         similarity.csv, portfolio_monthly.csv, quintile_table.csv, alphas.csv, robustness.csv,
-                 trials.csv, trials_monthly.csv, rank_correlations.csv, overfitting.json, summary.json
-figures/         cumulative_long_short_vs_spy.png, quintile_returns.png, similarity_by_year.png, dsr_trials.png
+                 trials.csv, trials_monthly.csv, rank_correlations.csv, overfitting.json, event_time.csv,
+                 placebo.csv, placebo_summary.json, summary.json
+figures/         cumulative_long_short_vs_spy.png, quintile_returns.png, similarity_by_year.png,
+                 dsr_trials.png, event_time_car.png, placebo_sharpe.png
 data/            universe.csv, filings.csv, prices.csv, factors_daily.csv (raw and processed text are not committed)
 ```
 
@@ -288,16 +358,19 @@ data/            universe.csv, filings.csv, prices.csv, factors_daily.csv (raw a
 
 ```bash
 pip install -r requirements.txt      # includes bto from github.com/iqueipopg/backtest-overfitting
-pytest -q                            # 23 tests, no network
+pytest -q                            # 27 tests, no network
+ruff check lazyprices tests          # lint, also run in CI
 python -m lazyprices                 # full pipeline; every stage is cached
+python -m lazyprices.report          # regenerate the note's tables from results/
+cd paper && pdflatex note.tex && pdflatex note.tex
 ```
 
 The first run downloads about 6.7 GB of 10-K documents from EDGAR (about 5
 minutes at 8 requests per second with 4 threads), cleans them (about 10
 minutes) and computes similarities (about 1 minute). With the cached
 `results/similarity.csv`, `data/prices.csv` and `data/factors_daily.csv` in the
-repository, `python -m lazyprices` reproduces every table and figure in under a
-minute without touching EDGAR. The EDGAR client sends the identifying
+repository, `python -m lazyprices` reproduces every table and figure in about
+two minutes without touching EDGAR (most of it the 200 placebo runs). The EDGAR client sends the identifying
 `User-Agent` the SEC requires; change it in `lazyprices/config.py` or through
 the `SEC_USER_AGENT` environment variable before running the download
 yourself.

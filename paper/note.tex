@@ -1,0 +1,161 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf,width=.92\textwidth}
+\usepackage{setspace}
+\setstretch{1.08}
+\graphicspath{{../figures/}}
+\input{generated/numbers}
+
+\title{\textbf{Lazy Prices on the S\&P~100:\\a replication and an overfitting audit}}
+\author{Ignacio Queipo de Llano\thanks{Code, data and this note: \url{https://github.com/iqueipopg/lazy-prices}. All numbers in the text are macros generated from the result files by \texttt{python -m lazyprices.report}.}}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Cohen, Malloy and Nguyen (2020) show that firms whose annual report changes little from one year to the next outperform firms whose report changes a lot, and that a long-short portfolio on this signal earned 30 to 60 basis points a month on the CRSP universe from 1995 to 2014. I replicate the strategy on the current S\&P~100 with free data (\nFilings{} 10-K filings from EDGAR, yfinance prices, Fama-French factors) over \sampleStart{} to \sampleEnd. The long-short portfolio earns \LSmean\% a year with an FF5+MOM alpha of \LSalphaFFfive\% ($t = \LStFFfive$); the twelve-month event-time abnormal return is \carLS\% ($t = \carLSt$); the within-cohort rank correlation between text change and forward return is indistinguishable from zero for every measure. Searching over \nTrials{} variants produces a best annualised Sharpe of \bestSharpe, but the deflated Sharpe ratio of that winner is \dsrRaw{} and its Sharpe sits at the \placeboBestPct th percentile of a placebo distribution obtained by shuffling scores within cohorts. On this universe and period there is no detectable effect. The note documents why that is the expected outcome given the sample and how the tools of Bailey and L\'opez de Prado keep the best of \nTrials{} backtests from being reported as a finding.
+\end{abstract}
+
+\section{Introduction}
+
+\emph{Lazy Prices} argues that annual reports are read by few and changed by fewer: when a firm rewrites large parts of its 10-K, the rewrite usually carries bad news, concentrated in the risk factors (Item 1A) and the management discussion (Item 7), and the market absorbs it slowly. The authors measure the change with four similarity measures between consecutive 10-Ks and 10-Qs, sort firms into quintiles, and find that a portfolio long ``non-changers'' and short ``changers'' earns 30 to 60 basis points a month of abnormal return over the following year, with the effect concentrated in the months after the filing.
+
+This note asks a narrow question: does the signal show up in the largest and most scrutinised US companies, using only public, free data? The answer is no, and the interesting part of the exercise is establishing that the ``no'' is robust to the researcher's own degrees of freedom. Section~\ref{sec:data} describes the data and its limitations, Section~\ref{sec:method} the construction, Section~\ref{sec:results} the results, Section~\ref{sec:overfit} the selection-bias audit and Section~\ref{sec:conclusion} what I would conclude.
+
+\section{Data}\label{sec:data}
+
+\paragraph{Universe.} The \nCompanies{} companies of the S\&P~100 as of September 2026, identified by CIK. This is a \emph{current} list, so every firm in it survived and grew into the index; firms that were members in 2010 and later shrank, were acquired or failed are absent. Five companies changed CIK after a holding-company reorganisation (Exxon Mobil, Alphabet, Disney, BlackRock, Medtronic); the predecessor registrant's filings are attributed to the current ticker. Companies listed later (AbbVie, Meta, PayPal, Uber, Palantir and others) enter when their second 10-K exists.
+
+\paragraph{Filings.} \nFilings{} original 10-K filings for fiscal years 2007 to 2025 (10-K/A amendments excluded), downloaded from the EDGAR submissions index and Archives with the required identifying \texttt{User-Agent}, at most eight requests a second and a local cache. FY2007 is used only as the predecessor of FY2008. The primary document is converted to plain text (inline-XBRL hidden blocks and CSS-hidden elements dropped, line breaks only at block elements so that headings are not split). Items 1A and 7 are located by pairing each ``Item 1A. Risk Factors'' / ``Item 7. Management's Discussion'' heading with the next ``Item 1B/2'' / ``Item 7A/8'' heading and keeping the longest span; table-of-contents entries and cross-references produce short spans and lose. Extractions shorter than 2,000 characters are treated as missing: Item 7 is missing in \shareMissingVII\% of pairs (banks and some industrials incorporate the MD\&A by reference to the annual report exhibit) and Item 1A in \shareMissingIA\%.
+
+\paragraph{Prices and factors.} Adjusted daily closes from yfinance for the \nCompanies{} tickers and SPY from January 2007; daily Fama-French five factors and momentum from the Kenneth French Data Library, compounded within calendar months.
+
+\section{Method}\label{sec:method}
+
+\paragraph{Similarity.} For each pair of consecutive 10-Ks of the same company (report dates 270 to 500 days apart), and for the full document, Item 1A and Item 7, two measures are computed on lower-case alphabetic tokens of at least two letters: cosine similarity between TF-IDF vectors and Jaccard similarity between the sets of distinct terms. The inverse document frequency is computed \emph{point in time} from all 10-Ks filed in months before the later filing, so a score never depends on documents that were not yet public. This yields \nPairs{} pairs (\nPairsIA{} with Item 1A, \nPairsVII{} with Item 7).
+
+Before any portfolio is formed, the first result is descriptive: cosine similarity on the full document is nearly saturated, with a median of \cosMedian{} and an interquartile range of \cosQone{} to \cosQthree. Annual reports of the largest US companies are long and mostly boilerplate, so the sort is made on the third decimal. Jaccard has more dispersion (median \jacMedian, IQR \jacQone{} to \jacQthree), and its median rose from \jacFirst{} in FY2008 to \jacLast{} in FY2025 (Figure~\ref{fig:sim}).
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{similarity_by_year.png}
+\caption{Similarity between consecutive 10-Ks of the same company, by fiscal year.}\label{fig:sim}
+\end{figure}
+
+\paragraph{Portfolios.} Filings are grouped into fiscal-year cohorts (the calendar year in which the reporting period ends; periods ending in the first two weeks of January belong to the previous year). Within each cohort, companies are sorted on the score into quintiles; Q5 holds the least-changed reports. A stock enters its quintile portfolio at the close of the first trading day of the month after its filing date and is held for twelve months, so the portfolio at any date averages the overlapping annual cohorts. Portfolios are equal-weighted; the long-short portfolio is Q5 minus Q1 and is defined only when both legs hold at least five stocks (about \legSize{} on average, minimum \legMin). Transaction costs are 10 basis points per unit of one-way turnover on each leg; realised turnover is \turnover{} per year for the two legs together.
+
+Ranking within a fiscal-year cohort means that an early filer's quintile depends on scores of firms filing later in the same season. Prices are never used before the filing date (the test suite checks the formation calendar), but the ranking is not strictly real time; a fully point-in-time variant that ranks each filing against the trailing twelve months of filings is reported as a robustness check.
+
+\paragraph{Evaluation.} Monthly returns of each quintile (in excess of the risk-free rate) and of the long-short portfolio are regressed on the CAPM, Fama-French three-factor and Fama-French five-factor plus momentum models with Newey-West standard errors (automatic lag $\lfloor 4(T/100)^{2/9}\rfloor = 4$). Sharpe ratios are annualised from monthly returns; a circular block bootstrap (blocks of six months, 2,000 draws) gives their confidence interval. Two model-free checks complement the portfolios: the cumulative market-adjusted return of each quintile by event month after formation, and the within-cohort Spearman correlation between the score and the twelve-month forward return, averaged across cohorts.
+
+\paragraph{Variants and selection bias.} The grid of variants is measure (cosine, Jaccard) $\times$ section (full, Item 1A, Item 7) $\times$ groups (terciles, quintiles, deciles) $\times$ formation lag (0, 1, 2 months): \nTrials{} trials. Their long-short returns on the common sample (\nObsCommon{} months) feed the deflated Sharpe ratio of Bailey and L\'opez de Prado (2014), with the effective number of trials estimated from the participation ratio of the trial correlation matrix, and the probability of backtest overfitting via combinatorially symmetric cross-validation (Bailey et al., 2017; $S = 16$, \cscvCombos{} partitions). A placebo re-runs the main specification \nPlacebo{} times with scores permuted within cohorts, which preserves every breakpoint and only breaks the link between text and company.
+
+\section{Results}\label{sec:results}
+
+\subsection{Main specification}
+
+\input{generated/main_ls}
+
+The long-short portfolio returns \LSmean\% a year before costs with a Sharpe ratio of \LSsharpe{} (bootstrap 95\% interval $[\LSsharpeLo, \LSsharpeHi]$) and an FF5+MOM alpha of \LSalphaFFfive\% ($t=\LStFFfive$); the CAPM and FF3 alphas are \LSalphaCAPM\% ($t=\LStCAPM$) and \LSalphaFFthree\% ($t=\LStFFthree$). Costs subtract about \turnover{} $\times$ 10 bp a year. SPY over the same months had a Sharpe ratio of \spySharpe. Figure~\ref{fig:cum} shows the cumulative return.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=.9\textwidth]{cumulative_long_short_vs_spy.png}
+\caption{Growth of one unit in the long-short portfolio, gross and net of costs, and in SPY.}\label{fig:cum}
+\end{figure}
+
+\subsection{Quintiles}
+
+\input{generated/quintiles}
+
+There is no monotonic pattern across quintiles (Table~\ref{tab:quintiles}, Figure~\ref{fig:quint}). Every quintile has a positive alpha of 2\% to 8\% a year. That is not a property of the strategy: it is the survivorship signature of a universe chosen after the fact, and it affects both legs in the same direction.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{quintile_returns.png}
+\caption{Annualised excess return and FF5+MOM alpha by quintile.}\label{fig:quint}
+\end{figure}
+
+\subsection{Event time}
+
+\input{generated/eventtime}
+
+The paper's central figure is the cumulative abnormal return in the months after the filing. Here (Table~\ref{tab:eventtime}, Figure~\ref{fig:event}) the least-changed quintile accumulates \carQhigh\% over twelve months against SPY and the most-changed quintile \carQlow\%; the difference is \carLS\% with a $t$-statistic of \carLSt{} when each cohort is treated as one observation. The sign is opposite to the paper and the magnitude is inside the noise.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=.9\textwidth]{event_time_car.png}
+\caption{Cumulative market-adjusted return by event month after formation; band is $\pm 1.96$ standard errors over cohorts for the difference.}\label{fig:event}
+\end{figure}
+
+\subsection{Robustness and a model-free check}
+
+\input{generated/robustness}
+\input{generated/rankcorr}
+
+The fully point-in-time ranking, and each half of the sample, give the same answer (Table~\ref{tab:robustness}). The rank correlations in Table~\ref{tab:rankcorr} have the paper's sign for the full document and for cosine on Item 1A but are three to four hundredths in magnitude with $t$-statistics near one.
+
+\section{Overfitting audit}\label{sec:overfit}
+
+\input{generated/overfitting}
+
+Of the \nTrials{} variants, \nTrialsPositive{} have a positive Sharpe ratio and \nTrialsSig{} have $|t| > 2$ on the FF5+MOM alpha; all \nTrialsSigNeg{} of the latter are Item 7 variants with a \emph{negative} alpha, that is, the opposite sign to the paper. The best variant on the common sample is \texttt{\bestTrial} with an annualised Sharpe of \bestSharpe{} (on its own full sample: alpha \bestOwnAlpha\%, $t = \bestOwnT$, maximum drawdown \bestOwnDD\%). Reported alone it would look like a modest finding. Against the expected maximum Sharpe of \nTrials{} zero-skill trials with the observed dispersion, \emaxRaw, its deflated Sharpe ratio is \dsrRaw; even against the lenient null of \nEff{} independent trials (expected maximum \emaxEff) it is \dsrEff, below the 0.95 certification threshold (Figure~\ref{fig:dsr}).
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{dsr_trials.png}
+\caption{Annualised Sharpe ratio of every variant on the common sample; dashed lines are the expected maximum Sharpe of $N$ zero-skill trials for the raw and effective $N$.}\label{fig:dsr}
+\end{figure}
+
+The probability of backtest overfitting is low, \pbo, and should not be read as reassurance. CSCV asks whether the in-sample winner keeps ranking well \emph{relative to the other variants} out of sample. It does, because the Item 7 variants are consistently the worst and the Item 1A cosine variants consistently the least bad; relative rankings are stable. PBO measures overfitting within the search, not whether the winner is profitable: the in-sample winner still loses money out of sample in \probOOSloss{} of the partitions.
+
+The placebo (Figure~\ref{fig:placebo}) shows what the machinery produces when the text carries no information. Shuffling scores within cohorts \nPlacebo{} times gives long-short Sharpe ratios with a standard deviation of \placeboSd{} and a 5th to 95th percentile range of \placeboLo{} to \placeboHi; the actual strategy sits at the \placeboPct th percentile, and \placeboAbsT\% of shuffles produce an alpha with $|t|>2$ on their own, about the nominal size. The best of the \nTrials{} variants sits at the \placeboBestPct th percentile of this single-specification null, which is exactly why the comparison must be made against the maximum of $N$ trials, as the DSR does, and not against one draw.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=.9\textwidth]{placebo_sharpe.png}
+\caption{Distribution of the long-short Sharpe ratio when similarity scores are permuted within fiscal-year cohorts.}\label{fig:placebo}
+\end{figure}
+
+The worst variant, \texttt{\worstTrial}, loses \worstMean\% a year (alpha \worstAlpha\%, $t=\worstT$, drawdown \worstDD\%). Among these firms the ones that rewrote their MD\&A the most did better over the following year. The rank correlations for Item 7 are zero, so this is a tail effect in the extreme groups of a subsample that excludes the banks whose MD\&A is incorporated by reference. With \nTrials{} correlated trials, \nTrialsSig{} of them at $|t|>2$ in the wrong direction is what dispersion looks like, not evidence of a reverse effect.
+
+\section{What I would conclude}\label{sec:conclusion}
+
+\begin{enumerate}
+\item On the current S\&P~100 from \sampleStart{} to \sampleEnd{} there is no detectable Lazy Prices effect. The main specification's alpha is slightly negative and indistinguishable from zero under every factor model, with or without costs; the event-time and rank-correlation checks agree.
+\item This is not a rejection of the paper. Its effect is estimated on thousands of firms over a period before the idea was published. Here the universe is 100 of the most scrutinised companies in the world, selected after the fact for having survived, in a period after publication. A null in this setting is consistent with the paper's own mechanism: slow attention matters least where attention is greatest.
+\item The measurement is weak for this universe. Cosine similarity on the full document is essentially one for every firm every year. Item-level measures help a little but are not always extractable.
+\item The best of \nTrials{} variants has a Sharpe ratio of \bestSharpe{} and a $t$-statistic above one. The deflated Sharpe ratio (\dsrRaw) and the placebo say it is what the luckiest of \nTrials{} noise trials would show. Reporting the grid, the DSR and the placebo alongside the winner is the difference between a backtest and a result.
+\end{enumerate}
+
+\paragraph{Limitations and next steps.} A historical constituent list would remove the survivorship bias; extending the universe to the S\&P~500 or to all of EDGAR for a subperiod would give the test power; adding 10-Qs would triple the number of signals as in the paper. None changes the conclusion of this note, which is about what can and cannot be learned from 100 large caps.
+
+\section*{References}
+\begin{itemize}\setlength\itemsep{2pt}
+\item Bailey, D.~H. and L\'opez de Prado, M. (2014). The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting and Non-Normality. \emph{Journal of Portfolio Management}, 40(5), 94--107.
+\item Bailey, D.~H., Borwein, J.~M., L\'opez de Prado, M. and Zhu, Q.~J. (2017). The Probability of Backtest Overfitting. \emph{Journal of Computational Finance}, 20(4), 39--69.
+\item Cohen, L., Malloy, C. and Nguyen, Q. (2020). Lazy Prices. \emph{Journal of Finance}, 75(3), 1371--1415.
+\item Fama, E.~F. and French, K.~R. (2015). A five-factor asset pricing model. \emph{Journal of Financial Economics}, 116(1), 1--22.
+\item Newey, W.~K. and West, K.~D. (1994). Automatic Lag Selection in Covariance Matrix Estimation. \emph{Review of Economic Studies}, 61(4), 631--653.
+\end{itemize}
+
+\appendix
+\section{All variants}
+\input{generated/trials}
+
+\section{Decisions not in the paper}
+\begin{itemize}\setlength\itemsep{2pt}
+\item FY2007 filings are downloaded only to serve as the predecessor of FY2008; one filing per company and fiscal year; amendments ignored.
+\item IDF weights are point in time. In the first months of the sample this reduces to a plain term-frequency cosine.
+\item Positions are established at the close of the first trading day of the month after the filing and earn returns from the next day; exit at the close of the first trading day twelve months later.
+\item The long-short return is undefined when either leg has fewer than five stocks, which removes the last months of 2008.
+\item Costs are a flat 10 basis points per unit of one-way turnover on each leg; no borrowing cost on the short leg.
+\item Tokens are alphabetic, so numbers do not count as textual change.
+\end{itemize}
+
+\end{document}

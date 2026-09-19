@@ -1,0 +1,19 @@
+{
+  "n_draws": 200,
+  "actual_sharpe": -0.10875563753162262,
+  "actual_sharpe_ci95": [
+    -0.5564411845786252,
+    0.37662485380511385
+  ],
+  "placebo_sharpe_mean": -0.0027721153609500627,
+  "placebo_sharpe_std": 0.24736018590112704,
+  "placebo_sharpe_p05_p95": [
+    -0.42397313794650887,
+    0.39637496390403626
+  ],
+  "share_of_draws_below_actual": 0.335,
+  "share_of_draws_below_best_variant": 0.995,
+  "share_of_draws_with_abs_t_above_2": 0.06,
+  "event_time_ls_car_12m_pct": -1.7545359996980063,
+  "event_time_ls_t_12m": -0.6016933812347142
+}

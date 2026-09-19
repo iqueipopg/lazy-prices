@@ -89,7 +89,9 @@ def rank_filings(
 # --------------------------------------------------------------------------- #
 # Calendar
 # --------------------------------------------------------------------------- #
-def first_trading_day_after(filing_date: pd.Timestamp, trading_days: pd.DatetimeIndex, lag_months: int = 0) -> pd.Timestamp | None:
+def first_trading_day_after(
+    filing_date: pd.Timestamp, trading_days: pd.DatetimeIndex, lag_months: int = 0
+) -> pd.Timestamp | None:
     """First trading day of the month that starts after ``filing_date``, shifted
     by ``lag_months`` additional months. ``None`` if beyond the sample."""
     month_start = (pd.Timestamp(filing_date) + pd.offsets.MonthBegin(1 + lag_months)).normalize()
@@ -124,8 +126,14 @@ def build_positions(
             continue
         exit_ = first_trading_day_after(r.filing_date, trading_days, lag_months + holding_months)
         rows.append(
-            {"ticker": r.ticker, "fiscal_year": r.fiscal_year, "filing_date": r.filing_date,
-             "quantile": int(r.quantile), "entry": entry, "exit": exit_}
+            {
+                "ticker": r.ticker,
+                "fiscal_year": r.fiscal_year,
+                "filing_date": r.filing_date,
+                "quantile": int(r.quantile),
+                "entry": entry,
+                "exit": exit_,
+            }
         )
     return pd.DataFrame(rows)
 
@@ -133,7 +141,9 @@ def build_positions(
 # --------------------------------------------------------------------------- #
 # Returns
 # --------------------------------------------------------------------------- #
-def holdings_matrix(positions: pd.DataFrame, trading_days: pd.DatetimeIndex, tickers: list[str]) -> dict[int, pd.DataFrame]:
+def holdings_matrix(
+    positions: pd.DataFrame, trading_days: pd.DatetimeIndex, tickers: list[str]
+) -> dict[int, pd.DataFrame]:
     """For each quantile, a boolean ``dates x tickers`` frame that is True on
     the days a stock is held (i.e. earns a return) in that group."""
     out = {}

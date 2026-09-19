@@ -31,7 +31,9 @@ def yf_symbol(ticker: str) -> str:
     return ticker.replace(".", "-")
 
 
-def download_prices(tickers: list[str], start: str = "2007-01-01", path: Path = PRICES_CSV, refresh: bool = False) -> pd.DataFrame:
+def download_prices(
+    tickers: list[str], start: str = "2007-01-01", path: Path = PRICES_CSV, refresh: bool = False
+) -> pd.DataFrame:
     """Adjusted daily closes for ``tickers`` plus the benchmark, wide format
     (index ``Date``, one column per ticker)."""
     if path.exists() and not refresh:

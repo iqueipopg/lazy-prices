@@ -10,7 +10,6 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-
 from bto import cscv, deflated_sharpe_ratio, effective_number_of_trials, higher_moments, sharpe_ratio
 
 FACTOR_MODELS = {
@@ -95,7 +94,9 @@ def summary_stats(returns: pd.Series) -> dict:
     }
 
 
-def evaluate_portfolio(monthly: pd.DataFrame, factors_m: pd.DataFrame, n_quantiles: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def evaluate_portfolio(
+    monthly: pd.DataFrame, factors_m: pd.DataFrame, n_quantiles: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Per-quantile table (excess returns over RF) and long-short alpha table."""
     fac = factors_m.reindex(monthly.index)
     rows = []
@@ -110,8 +111,11 @@ def evaluate_portfolio(monthly: pd.DataFrame, factors_m: pd.DataFrame, n_quantil
             row[f"alpha_{model}"] = reg["alpha_ann_pct"]
             row[f"t_{model}"] = reg["t_stat"]
         rows.append(row)
+    from .diagnostics import sharpe_bootstrap_ci
+
     for col in ("LS", "LS_net"):
         row = {"portfolio": col, **summary_stats(monthly[col])}
+        row["sharpe_ci_lo"], row["sharpe_ci_hi"] = sharpe_bootstrap_ci(monthly[col])
         for model in FACTOR_MODELS:
             reg = alpha_regression(monthly[col], fac, model)
             row[f"alpha_{model}"] = reg["alpha_ann_pct"]
@@ -120,8 +124,11 @@ def evaluate_portfolio(monthly: pd.DataFrame, factors_m: pd.DataFrame, n_quantil
     table = pd.DataFrame(rows).set_index("portfolio")
 
     alphas = pd.DataFrame(
-        [alpha_regression(monthly[col], fac, model) | {"portfolio": col}
-         for col in ("LS", "LS_net") for model in FACTOR_MODELS]
+        [
+            alpha_regression(monthly[col], fac, model) | {"portfolio": col}
+            for col in ("LS", "LS_net")
+            for model in FACTOR_MODELS
+        ]
     ).set_index(["portfolio", "model"])
     return table, alphas
 
@@ -191,14 +198,16 @@ def overfitting_analysis(trials: pd.DataFrame, n_splits: int = 16) -> Overfittin
         prob_oos_loss=float(res.prob_oos_loss),
         cscv_splits=int(res.n_splits),
         cscv_combinations=int(res.n_combinations),
-        trial_sharpe_annual={str(c): float(v * ann) for c, v in zip(x.columns, sr)},
+        trial_sharpe_annual={str(c): float(v * ann) for c, v in zip(x.columns, sr, strict=False)},
     )
 
 
 # --------------------------------------------------------------------------- #
 # Model-free check: cross-sectional rank correlations
 # --------------------------------------------------------------------------- #
-def rank_correlations(sim: pd.DataFrame, prices: pd.DataFrame, score_cols: list[str], min_cohort: int = 20) -> pd.DataFrame:
+def rank_correlations(
+    sim: pd.DataFrame, prices: pd.DataFrame, score_cols: list[str], min_cohort: int = 20
+) -> pd.DataFrame:
     """Spearman correlation, within each fiscal-year cohort, between the
     similarity score and the stock's return over the twelve months after the
     first trading day of the month following the filing. The time-series mean
@@ -226,6 +235,13 @@ def rank_correlations(sim: pd.DataFrame, prices: pd.DataFrame, score_cols: list[
             if len(g) >= min_cohort:
                 yearly.append(spearmanr(g[c], g["fwd12"])[0])
         y = np.array(yearly)
-        rows.append({"score": c, "mean_rank_corr": y.mean(), "t_stat": y.mean() / y.std(ddof=1) * np.sqrt(len(y)),
-                     "n_years": len(y), "share_positive": float((y > 0).mean())})
+        rows.append(
+            {
+                "score": c,
+                "mean_rank_corr": y.mean(),
+                "t_stat": y.mean() / y.std(ddof=1) * np.sqrt(len(y)),
+                "n_years": len(y),
+                "share_positive": float((y > 0).mean()),
+            }
+        )
     return pd.DataFrame(rows).set_index("score")

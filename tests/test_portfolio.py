@@ -40,8 +40,14 @@ def test_rank_filings_by_fiscal_year_cohort():
 
 def test_rank_filings_trailing_is_point_in_time():
     dates = pd.date_range("2011-01-31", periods=12, freq="ME")
-    sim = pd.DataFrame({"ticker": [f"T{i}" for i in range(12)], "fiscal_year": 2010,
-                        "filing_date": dates, "cos_full": np.linspace(0.1, 0.9, 12)})
+    sim = pd.DataFrame(
+        {
+            "ticker": [f"T{i}" for i in range(12)],
+            "fiscal_year": 2010,
+            "filing_date": dates,
+            "cos_full": np.linspace(0.1, 0.9, 12),
+        }
+    )
     ranked = pf.rank_filings(sim, "cos_full", n_quantiles=2, cohort="trailing", min_cohort=4)
     # the first three filings have fewer than 4 predecessors: dropped
     assert set(ranked["ticker"]) == {f"T{i}" for i in range(3, 12)}
@@ -72,8 +78,14 @@ def test_no_look_ahead_positions_start_after_filing(market):
     rets.loc["2020-03-03":"2021-03-01", "X"] = 0.01
     rets.loc["2021-03-02":, "X"] = 1.0  # huge returns after the exit day
     rets["Y"] = 0.0
-    ranked = pd.DataFrame({"ticker": ["X", "Y"], "fiscal_year": [2019, 2019],
-                           "filing_date": pd.to_datetime(["2020-02-14", "2020-02-14"]), "quantile": [2, 1]})
+    ranked = pd.DataFrame(
+        {
+            "ticker": ["X", "Y"],
+            "fiscal_year": [2019, 2019],
+            "filing_date": pd.to_datetime(["2020-02-14", "2020-02-14"]),
+            "quantile": [2, 1],
+        }
+    )
     pos = pf.build_positions(ranked, days)
     assert pos.set_index("ticker").loc["X", "entry"] == pd.Timestamp("2020-03-02")
     assert pos.set_index("ticker").loc["X", "exit"] == pd.Timestamp("2021-03-01")
@@ -100,8 +112,9 @@ def test_equal_weight_and_turnover(market):
 
 def test_to_monthly_compounds(market):
     days, _ = market
-    daily = pd.DataFrame({"Q1": 0.0, "Q2": 0.01, "LS": 0.01, "LS_net": 0.01,
-                          "turnover": 0.1, "n_long": 3, "n_short": 3}, index=days)
+    daily = pd.DataFrame(
+        {"Q1": 0.0, "Q2": 0.01, "LS": 0.01, "LS_net": 0.01, "turnover": 0.1, "n_long": 3, "n_short": 3}, index=days
+    )
     m = pf.to_monthly(daily)
     n_jan = len(pd.bdate_range("2020-01-01", "2020-01-31"))
     assert m.iloc[0]["LS"] == pytest.approx(1.01**n_jan - 1)

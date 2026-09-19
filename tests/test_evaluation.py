@@ -11,8 +11,9 @@ from lazyprices import evaluation as ev
 def factors():
     rng = np.random.default_rng(0)
     idx = pd.date_range("2000-01-31", periods=600, freq="ME")
-    f = pd.DataFrame(rng.normal(0.005, 0.04, size=(600, 6)), index=idx,
-                     columns=["Mkt-RF", "SMB", "HML", "RMW", "CMA", "Mom"])
+    f = pd.DataFrame(
+        rng.normal(0.005, 0.04, size=(600, 6)), index=idx, columns=["Mkt-RF", "SMB", "HML", "RMW", "CMA", "Mom"]
+    )
     f["RF"] = 0.002
     return f
 
@@ -70,8 +71,7 @@ def test_monthly_factors_compound():
 def test_overfitting_analysis_on_noise():
     """On pure-noise trials, the best Sharpe is not certified by the DSR."""
     rng = np.random.default_rng(4)
-    trials = pd.DataFrame(rng.normal(0, 0.03, size=(240, 40)),
-                          columns=[f"t{i}" for i in range(40)])
+    trials = pd.DataFrame(rng.normal(0, 0.03, size=(240, 40)), columns=[f"t{i}" for i in range(40)])
     rep = ev.overfitting_analysis(trials, n_splits=8)
     assert rep.n_trials == 40
     assert 0.0 <= rep.dsr_raw < 0.95
